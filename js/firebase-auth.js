@@ -16,19 +16,19 @@ import {
     browserSessionPersistence
 } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js";
 import { 
-    getFirestore, 
-    doc, 
-    setDoc, 
-    getDoc, 
-    updateDoc,
-    serverTimestamp,
-    collection
-} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js";
+    getDatabase, 
+    ref, 
+    set, 
+    get,
+    update,
+    serverTimestamp
+} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-database.js";
 
 // Firebase configuration
 const firebaseConfig = {
     apiKey: "AIzaSyANfH2Y1hx1zFSFp4fTEJGk6lQnZY1SdFI",
     authDomain: "tachanotdb.firebaseapp.com",
+    databaseURL: "https://tachanotdb-default-rtdb.europe-west1.firebasedatabase.app",
     projectId: "tachanotdb",
     storageBucket: "tachanotdb.firebasestorage.app",
     messagingSenderId: "121171399463",
@@ -38,11 +38,11 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+const db = getDatabase(app);
 
 console.log('Firebase initialized successfully');
 console.log('Auth instance:', auth);
-console.log('Firestore instance:', db);
+console.log('Realtime Database instance:', db);
 
 // Register new user
 async function registerUser(formData) {
@@ -72,10 +72,11 @@ async function registerUser(formData) {
             displayName: `${formData.firstName} ${formData.lastName}`
         });
 
-        // Try to save additional user data to Firestore
+        // Save additional user data to Realtime Database
         try {
-            console.log('Saving user data to Firestore...');
-            await setDoc(doc(db, 'users', user.uid), {
+            console.log('Saving user data to Realtime Database...');
+            const userRef = ref(db, 'users/' + user.uid);
+            await set(userRef, {
                 firstName: formData.firstName,
                 lastName: formData.lastName,
                 email: formData.email,
@@ -83,9 +84,9 @@ async function registerUser(formData) {
                 lastLogin: serverTimestamp()
             });
             console.log('User data saved successfully!');
-        } catch (firestoreError) {
-            console.warn('Firestore save failed (user still created in Auth):', firestoreError);
-            // Continue anyway - user account is created, just not saved to Firestore
+        } catch (dbError) {
+            console.warn('Database save failed (user still created in Auth):', dbError);
+            // Continue anyway - user account is created, just not saved to database
         }
         
         if (typeof window.showSuccessMessage === 'function') {
@@ -157,13 +158,14 @@ async function loginUser(email, password, rememberMe) {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        // Try to update last login timestamp
+        // Update last login timestamp in Realtime Database
         try {
-            await updateDoc(doc(db, 'users', user.uid), {
+            const userRef = ref(db, 'users/' + user.uid);
+            await update(userRef, {
                 lastLogin: serverTimestamp()
             });
-        } catch (firestoreError) {
-            console.warn('Failed to update last login in Firestore:', firestoreError);
+        } catch (dbError) {
+            console.warn('Failed to update last login in database:', dbError);
             // Continue anyway - login is successful
         }
 
@@ -229,18 +231,18 @@ function checkAuthState() {
             // Update navigation to show "Logged In" instead of Login/Register
             updateNavigationForLoggedInUser(user);
             
-            // Get user data from Firestore
+            // Get user data from Realtime Database
             try {
-                const userDocRef = doc(db, 'users', user.uid);
-                const userDoc = await getDoc(userDocRef);
-                if (userDoc.exists()) {
-                    const userData = userDoc.data();
+                const userRef = ref(db, 'users/' + user.uid);
+                const snapshot = await get(userRef);
+                if (snapshot.exists()) {
+                    const userData = snapshot.val();
                     console.log('User data:', userData);
                     // You can update UI elements here based on user data
                 }
             } catch (error) {
-                // Silently handle Firestore errors - auth still works
-                console.log('Note: Could not fetch user profile data (Firestore may not be enabled)');
+                // Silently handle database errors - auth still works
+                console.log('Note: Could not fetch user profile data (Database may not be enabled)');
             }
         } else {
             // User is signed out
