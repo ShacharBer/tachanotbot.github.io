@@ -4,9 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contact Us - BermanFPV</title>
+    <title>Contact Us - TachanotBOT</title>
     <link rel="icon" type="image/png" href="img/logow.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <link href="css/style.css" rel="stylesheet">
 </head>
 
@@ -15,8 +16,8 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
         <div class="container">
             <a class="navbar-brand" href="index.html">
-                <img src="img/logow.png" alt="BermanFPV Logo" height="30" class="d-inline-block align-text-top">
-                BermanFPV
+                <i class="bi bi-robot me-2"></i>
+                TachanotBOT
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -27,16 +28,19 @@
                         <a class="nav-link" href="index.html">Home</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="gallery.html">Gallery</a>
-                    </li>
-                    <li class="nav-item">
                         <a class="nav-link" href="about.html">About</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link active" href="contact.html">Contact</a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="control.html">Control</a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="login.html">Login</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="register.html">Register</a>
                     </li>
                 </ul>
             </div>
@@ -44,84 +48,53 @@
     </nav>
 
     <!-- Contact Form Section -->
-    <section class="py-5">
+    <section class="py-5 mt-5">
         <div class="container">
             <h1 class="text-center mb-5">Contact Us</h1>
+            <p class="text-center mb-5">Have questions or feedback? We'd love to hear from you!</p>
             <div class="row justify-content-center">
                 <div class="col-md-8">
                     <form class="needs-validation" novalidate>
                         <div class="mb-3">
-                            <label for="name" class="form-label">Name</label>
+                            <label for="name" class="form-label">
+                                <i class="bi bi-person me-2"></i>Name
+                            </label>
                             <input type="text" class="form-control" id="name" required>
                         </div>
 
                         <div class="mb-3">
-                            <label for="message" class="form-label">Your Message</label>
-                            <textarea class="form-control" id="message" rows="5" required></textarea>
+                            <label for="email" class="form-label">
+                                <i class="bi bi-envelope me-2"></i>Email Address
+                            </label>
+                            <input type="email" class="form-control" id="email" required>
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label">Your Experience Level</label>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="experience" id="beginner"
-                                    value="beginner" required>
-                                <label class="form-check-label" for="beginner">Beginner</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="experience" id="intermediate"
-                                    value="intermediate">
-                                <label class="form-check-label" for="intermediate">Intermediate</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="experience" id="advanced"
-                                    value="advanced">
-                                <label class="form-check-label" for="advanced">Advanced</label>
-                            </div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label">Interested In (Select all that apply)</label>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="racing" value="racing">
-                                <label class="form-check-label" for="racing">Drone Racing</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="freestyle" value="freestyle">
-                                <label class="form-check-label" for="freestyle">Freestyle Flying</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="filming" value="filming">
-                                <label class="form-check-label" for="filming">Aerial Filming</label>
-                            </div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="preferred-drone" class="form-label">Preferred Drone Type</label>
-                            <select class="form-select" id="preferred-drone" required>
+                            <label for="subject" class="form-label">
+                                <i class="bi bi-chat-dots me-2"></i>Subject
+                            </label>
+                            <select class="form-select" id="subject" required>
                                 <option value="">Choose...</option>
-                                <option value="3inch">3 Inch Freestyle</option>
-                                <option value="5inch">5 Inch Freestyle</option>
-                                <option value="cinewhoop">Cinewhoop</option>
-                                <option value="tinyhawk">Micro (Tinyhawk)</option>
-                            </select>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="country" class="form-label">Country</label>
-                            <select class="form-select" id="country" required>
-                                <option value="">Choose your country...</option>
-                                <option value="us">United States</option>
-                                <option value="uk">United Kingdom</option>
-                                <option value="ca">Canada</option>
-                                <option value="au">Australia</option>
-                                <option value="de">Germany</option>
-                                <option value="fr">France</option>
-                                <option value="il">Israel</option>
+                                <option value="general">General Inquiry</option>
+                                <option value="delivery">Delivery Request</option>
+                                <option value="tracking">Package Tracking</option>
+                                <option value="technical">Technical Support</option>
+                                <option value="feature">Feature Request</option>
+                                <option value="bug">Report a Bug</option>
                                 <option value="other">Other</option>
                             </select>
                         </div>
 
-                        <button type="submit" class="btn btn-primary">Submit</button>
+                        <div class="mb-3">
+                            <label for="message" class="form-label">
+                                <i class="bi bi-chat-square-text me-2"></i>Your Message
+                            </label>
+                            <textarea class="form-control" id="message" rows="5" required></textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-send me-2"></i>Send Message
+                        </button>
                     </form>
                 </div>
             </div>
@@ -133,16 +106,21 @@
         <div class="container">
             <div class="row">
                 <div class="col-md-6">
-                    <h5>BermanFPV</h5>
-                    <p>Your gateway to the exciting world of FPV drone flying.</p>
+                    <h5><i class="bi bi-robot me-2"></i>TachanotBOT</h5>
+                    <p>Autonomous package delivery robot for transportation stations.</p>
                 </div>
                 <div class="col-md-6">
-                    <h5>Follow Us</h5>
-                    <div class="social-links">
-                        <a href="#" class="text-white me-3"><i class="bi bi-facebook"></i></a>
-                        <a href="#" class="text-white me-3"><i class="bi bi-instagram"></i></a>
-                        <a href="#" class="text-white me-3"><i class="bi bi-youtube"></i></a>
-                    </div>
+                    <h5>Quick Links</h5>
+                    <ul class="list-unstyled">
+                        <li><a href="index.html" class="text-white">Home</a></li>
+                        <li><a href="about.html" class="text-white">About</a></li>
+                        <li><a href="contact.html" class="text-white">Contact</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="row mt-3">
+                <div class="col-12 text-center">
+                    <p class="mb-0">&copy; 2025 TachanotBOT. All rights reserved.</p>
                 </div>
             </div>
         </div>

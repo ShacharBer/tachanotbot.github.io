@@ -1,0 +1,293 @@
+// Bot Control Panel JavaScript
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js";
+import { 
+    getAuth, 
+    onAuthStateChanged 
+} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js";
+import { 
+    getDatabase, 
+    ref, 
+    get,
+    set,
+    onValue,
+    serverTimestamp
+} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-database.js";
+
+// Firebase configuration (same as firebase-auth.js)
+const firebaseConfig = {
+    apiKey: "AIzaSyANfH2Y1hx1zFSFp4fTEJGk6lQnZY1SdFI",
+    authDomain: "tachanotdb.firebaseapp.com",
+    databaseURL: "https://tachanotdb-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "tachanotdb",
+    storageBucket: "tachanotdb.firebasestorage.app",
+    messagingSenderId: "121171399463",
+    appId: "1:121171399463:web:e3e24ebe626897889c0f02"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+
+// Station definitions with colors
+const stations = [
+    { id: 'red', name: 'Red Station', color: '#dc3545' },
+    { id: 'blue', name: 'Blue Station', color: '#0d6efd' },
+    { id: 'green', name: 'Green Station', color: '#198754' },
+    { id: 'yellow', name: 'Yellow Station', color: '#ffc107' },
+    { id: 'purple', name: 'Purple Station', color: '#6f42c1' },
+    { id: 'orange', name: 'Orange Station', color: '#fd7e14' }
+];
+
+let currentUser = null;
+let selectedStation = null;
+let currentStation = 'red'; // Default starting station
+
+// Check authentication state
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+        currentUser = user;
+        showControlPanel();
+        loadBotStatus();
+        loadStations();
+        setupRealtimeListeners();
+    } else {
+        showLoginPrompt();
+    }
+});
+
+// Show control panel for authenticated users
+function showControlPanel() {
+    document.querySelector('.login-prompt').classList.remove('show');
+    document.querySelector('.auth-required').classList.add('show');
+}
+
+// Show login prompt for unauthenticated users
+function showLoginPrompt() {
+    document.querySelector('.auth-required').classList.remove('show');
+    document.querySelector('.login-prompt').classList.add('show');
+}
+
+// Load bot status from database
+async function loadBotStatus() {
+    try {
+        const botStatusRef = ref(db, 'bot/status');
+        const snapshot = await get(botStatusRef);
+        
+        if (snapshot.exists()) {
+            const status = snapshot.val();
+            currentStation = status.currentStation || 'red';
+            updateCurrentStationDisplay(currentStation);
+            updateBotStatus(status.state || 'Ready');
+        } else {
+            // Initialize bot status if it doesn't exist
+            await set(botStatusRef, {
+                currentStation: 'red',
+                state: 'Ready',
+                lastUpdated: serverTimestamp()
+            });
+            updateCurrentStationDisplay('red');
+        }
+    } catch (error) {
+        console.error('Error loading bot status:', error);
+        showNotification('Error loading bot status', 'danger');
+    }
+}
+
+// Load and display all stations
+function loadStations() {
+    const stationGrid = document.getElementById('stationGrid');
+    stationGrid.innerHTML = '';
+    
+    stations.forEach(station => {
+        // Skip current station from available destinations
+        if (station.id === currentStation) {
+            return;
+        }
+        
+        const stationCard = document.createElement('div');
+        stationCard.className = 'station-card card';
+        stationCard.dataset.stationId = station.id;
+        stationCard.innerHTML = `
+            <div class="card-body text-center p-4">
+                <div class="station-indicator" style="background-color: ${station.color};">
+                    <i class="bi bi-building"></i>
+                </div>
+                <h5 class="card-title">${station.name}</h5>
+                <p class="text-muted small mb-0">Click to select</p>
+            </div>
+        `;
+        
+        stationCard.addEventListener('click', () => selectStation(station));
+        stationGrid.appendChild(stationCard);
+    });
+}
+
+// Update current station display
+function updateCurrentStationDisplay(stationId) {
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+    
+    document.getElementById('currentStationName').textContent = station.name;
+    document.getElementById('currentStationTitle').textContent = station.name;
+    
+    const colorIndicator = document.getElementById('currentStationColor');
+    colorIndicator.style.backgroundColor = station.color;
+}
+
+// Update bot status badge
+function updateBotStatus(status) {
+    const statusBadge = document.getElementById('botStatus');
+    statusBadge.textContent = status;
+    
+    // Update badge color based on status
+    statusBadge.className = 'badge';
+    if (status === 'Ready') {
+        statusBadge.classList.add('bg-success');
+    } else if (status === 'Moving' || status === 'In Transit') {
+        statusBadge.classList.add('bg-warning');
+    } else if (status === 'Error') {
+        statusBadge.classList.add('bg-danger');
+    } else {
+        statusBadge.classList.add('bg-info');
+    }
+}
+
+// Select a destination station
+function selectStation(station) {
+    // Remove previous selection
+    document.querySelectorAll('.station-card').forEach(card => {
+        card.classList.remove('selected');
+    });
+    
+    // Add selection to clicked card
+    const card = document.querySelector(`[data-station-id="${station.id}"]`);
+    card.classList.add('selected');
+    
+    selectedStation = station;
+    
+    // Enable send button
+    document.getElementById('sendCommandBtn').disabled = false;
+    document.getElementById('selectionHint').textContent = `Selected: ${station.name}`;
+}
+
+// Send command to move bot
+async function sendBotCommand() {
+    if (!selectedStation) {
+        showNotification('Please select a destination station', 'warning');
+        return;
+    }
+    
+    const sendBtn = document.getElementById('sendCommandBtn');
+    const originalText = sendBtn.innerHTML;
+    
+    try {
+        // Show loading state
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Sending Command...';
+        document.getElementById('loadingSpinner').classList.add('active');
+        
+        // Create command in database
+        const commandRef = ref(db, `bot/commands/${Date.now()}`);
+        await set(commandRef, {
+            from: currentStation,
+            to: selectedStation.id,
+            requestedBy: currentUser.email,
+            timestamp: serverTimestamp(),
+            status: 'pending'
+        });
+        
+        // Update bot status
+        const botStatusRef = ref(db, 'bot/status');
+        await set(botStatusRef, {
+            currentStation: currentStation,
+            targetStation: selectedStation.id,
+            state: 'Moving',
+            lastUpdated: serverTimestamp()
+        });
+        
+        showNotification(`Command sent! Bot is moving to ${selectedStation.name}`, 'success');
+        
+        // Simulate bot movement (in real implementation, the bot would update this)
+        setTimeout(async () => {
+            await set(botStatusRef, {
+                currentStation: selectedStation.id,
+                state: 'Ready',
+                lastUpdated: serverTimestamp()
+            });
+            
+            currentStation = selectedStation.id;
+            selectedStation = null;
+            
+            updateCurrentStationDisplay(currentStation);
+            updateBotStatus('Ready');
+            loadStations();
+            
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = originalText;
+            document.getElementById('selectionHint').textContent = 'Select a destination station above';
+            document.getElementById('loadingSpinner').classList.remove('active');
+            
+            showNotification('Bot arrived at destination!', 'success');
+        }, 5000); // 5 second simulated travel time
+        
+    } catch (error) {
+        console.error('Error sending command:', error);
+        showNotification('Error sending command. Please try again.', 'danger');
+        
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = originalText;
+        document.getElementById('loadingSpinner').classList.remove('active');
+    }
+}
+
+// Setup realtime listeners for bot status updates
+function setupRealtimeListeners() {
+    const botStatusRef = ref(db, 'bot/status');
+    
+    onValue(botStatusRef, (snapshot) => {
+        if (snapshot.exists()) {
+            const status = snapshot.val();
+            
+            // Only update if status changed
+            if (status.currentStation !== currentStation) {
+                currentStation = status.currentStation;
+                updateCurrentStationDisplay(currentStation);
+                loadStations(); // Reload available stations
+                
+                // Reset selection
+                selectedStation = null;
+                document.getElementById('sendCommandBtn').disabled = true;
+                document.getElementById('selectionHint').textContent = 'Select a destination station above';
+            }
+            
+            updateBotStatus(status.state || 'Ready');
+        }
+    });
+}
+
+// Show notification
+function showNotification(message, type = 'info') {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-5`;
+    alertDiv.style.zIndex = '9999';
+    alertDiv.style.minWidth = '300px';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    
+    setTimeout(() => {
+        alertDiv.remove();
+    }, 5000);
+}
+
+// Event listener for send command button
+document.addEventListener('DOMContentLoaded', () => {
+    const sendBtn = document.getElementById('sendCommandBtn');
+    if (sendBtn) {
+        sendBtn.addEventListener('click', sendBotCommand);
+    }
+});
