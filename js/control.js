@@ -42,6 +42,8 @@ const stations = [
 let currentUser = null;
 let selectedStation = null;
 let currentStation = 'red'; // Default starting station
+let isConnected = false;
+let connectionCheckInterval = null;
 
 // Check authentication state
 onAuthStateChanged(auth, (user) => {
@@ -51,8 +53,10 @@ onAuthStateChanged(auth, (user) => {
         loadBotStatus();
         loadStations();
         setupRealtimeListeners();
+        startConnectionMonitoring();
     } else {
         showLoginPrompt();
+        stopConnectionMonitoring();
     }
 });
 
@@ -264,6 +268,68 @@ function setupRealtimeListeners() {
             updateBotStatus(status.state || 'Ready');
         }
     });
+}
+
+// Monitor ESP32 connection status
+function startConnectionMonitoring() {
+    const connectionRef = ref(db, 'bot/esp32/connected');
+    const lastHeartbeatRef = ref(db, 'bot/esp32/lastHeartbeat');
+    
+    // Listen for connection status changes
+    onValue(connectionRef, (snapshot) => {
+        if (snapshot.exists()) {
+            isConnected = snapshot.val();
+            updateConnectionStatus(isConnected);
+        } else {
+            isConnected = false;
+            updateConnectionStatus(false);
+        }
+    });
+    
+    // Check heartbeat every 5 seconds
+    connectionCheckInterval = setInterval(async () => {
+        try {
+            const snapshot = await get(lastHeartbeatRef);
+            if (snapshot.exists()) {
+                const lastHeartbeat = snapshot.val();
+                const now = Date.now();
+                const timeDiff = now - lastHeartbeat;
+                
+                // Consider disconnected if no heartbeat for more than 10 seconds
+                if (timeDiff > 10000) {
+                    isConnected = false;
+                    updateConnectionStatus(false);
+                }
+            } else {
+                isConnected = false;
+                updateConnectionStatus(false);
+            }
+        } catch (error) {
+            console.error('Error checking heartbeat:', error);
+        }
+    }, 5000);
+}
+
+// Stop connection monitoring
+function stopConnectionMonitoring() {
+    if (connectionCheckInterval) {
+        clearInterval(connectionCheckInterval);
+        connectionCheckInterval = null;
+    }
+}
+
+// Update connection status display
+function updateConnectionStatus(connected) {
+    const statusBadge = document.getElementById('connectionStatus');
+    if (!statusBadge) return;
+    
+    if (connected) {
+        statusBadge.className = 'badge bg-success';
+        statusBadge.innerHTML = '<i class="bi bi-wifi me-1"></i>Connected';
+    } else {
+        statusBadge.className = 'badge bg-danger';
+        statusBadge.innerHTML = '<i class="bi bi-wifi-off me-1"></i>Disconnected';
+    }
 }
 
 // Show notification
