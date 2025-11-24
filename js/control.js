@@ -182,6 +182,12 @@ async function sendBotCommand() {
         return;
     }
     
+    // Check if bot is connected
+    if (!isConnected) {
+        showNotification('❌ Bot is not connected! Please check ESP32 connection.', 'danger');
+        return;
+    }
+    
     const sendBtn = document.getElementById('sendCommandBtn');
     const originalText = sendBtn.innerHTML;
     
@@ -190,6 +196,23 @@ async function sendBotCommand() {
         sendBtn.disabled = true;
         sendBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Sending Command...';
         document.getElementById('loadingSpinner').classList.add('active');
+        
+        // Check current bot state
+        const botStatusRef = ref(db, 'bot/status');
+        const statusSnapshot = await get(botStatusRef);
+        
+        if (statusSnapshot.exists()) {
+            const currentStatus = statusSnapshot.val();
+            
+            // Don't allow new commands if bot is already moving
+            if (currentStatus.state === 'Moving') {
+                showNotification('⚠️ Bot is already in transit. Please wait for current movement to complete.', 'warning');
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = originalText;
+                document.getElementById('loadingSpinner').classList.remove('active');
+                return;
+            }
+        }
         
         // Create command in database
         const commandRef = ref(db, `bot/commands/${Date.now()}`);
@@ -201,43 +224,40 @@ async function sendBotCommand() {
             status: 'pending'
         });
         
-        // Update bot status
-        const botStatusRef = ref(db, 'bot/status');
+        // Update bot status to set target station
         await set(botStatusRef, {
             currentStation: currentStation,
             targetStation: selectedStation.id,
-            state: 'Moving',
+            state: 'Command Sent',
             lastUpdated: serverTimestamp()
         });
         
-        showNotification(`Command sent! Bot is moving to ${selectedStation.name}`, 'success');
+        showNotification(`✅ Command sent! Waiting for bot to start moving to ${selectedStation.name}...`, 'success');
         
-        // Simulate bot movement (in real implementation, the bot would update this)
-        setTimeout(async () => {
-            await set(botStatusRef, {
-                currentStation: selectedStation.id,
-                state: 'Ready',
-                lastUpdated: serverTimestamp()
-            });
-            
-            currentStation = selectedStation.id;
-            selectedStation = null;
-            
-            updateCurrentStationDisplay(currentStation);
-            updateBotStatus('Ready');
-            loadStations();
-            
-            sendBtn.disabled = true;
-            sendBtn.innerHTML = originalText;
-            document.getElementById('selectionHint').textContent = 'Select a destination station above';
-            document.getElementById('loadingSpinner').classList.remove('active');
-            
-            showNotification('Bot arrived at destination!', 'success');
-        }, 5000); // 5 second simulated travel time
+        // Reset button but keep it disabled until bot completes movement
+        sendBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Waiting for Bot Response...';
+        document.getElementById('loadingSpinner').classList.remove('active');
+        
+        // Clear selection
+        selectedStation = null;
+        document.querySelectorAll('.station-card').forEach(card => {
+            card.classList.remove('selected');
+        });
+        document.getElementById('selectionHint').textContent = 'Command sent - waiting for bot...';
         
     } catch (error) {
         console.error('Error sending command:', error);
-        showNotification('Error sending command. Please try again.', 'danger');
+        
+        let errorMessage = '❌ Failed to send command. ';
+        if (error.code === 'PERMISSION_DENIED') {
+            errorMessage += 'Database permission denied. Check Firebase rules.';
+        } else if (error.code === 'NETWORK_ERROR') {
+            errorMessage += 'Network error. Check your internet connection.';
+        } else {
+            errorMessage += error.message;
+        }
+        
+        showNotification(errorMessage, 'danger');
         
         sendBtn.disabled = false;
         sendBtn.innerHTML = originalText;
@@ -252,21 +272,65 @@ function setupRealtimeListeners() {
     onValue(botStatusRef, (snapshot) => {
         if (snapshot.exists()) {
             const status = snapshot.val();
+            const previousStation = currentStation;
+            const previousState = botState || 'Ready';
             
-            // Only update if status changed
-            if (status.currentStation !== currentStation) {
+            // Update current station if changed
+            if (status.currentStation && status.currentStation !== currentStation) {
                 currentStation = status.currentStation;
                 updateCurrentStationDisplay(currentStation);
                 loadStations(); // Reload available stations
                 
-                // Reset selection
+                // Show notification when bot arrives
+                if (previousState === 'Moving' && status.state === 'Ready') {
+                    const stationInfo = stations.find(s => s.id === currentStation);
+                    showNotification(`✅ Bot arrived at ${stationInfo ? stationInfo.name : currentStation}!`, 'success');
+                }
+                
+                // Reset selection and button
                 selectedStation = null;
-                document.getElementById('sendCommandBtn').disabled = true;
+                const sendBtn = document.getElementById('sendCommandBtn');
+                sendBtn.disabled = true;
+                sendBtn.innerHTML = '<i class="bi bi-send me-2"></i>Send Bot to Selected Station';
                 document.getElementById('selectionHint').textContent = 'Select a destination station above';
             }
             
-            updateBotStatus(status.state || 'Ready');
+            // Handle state changes
+            if (status.state !== previousState) {
+                updateBotStatus(status.state || 'Ready');
+                
+                // Show appropriate notifications based on state
+                if (status.state === 'Moving' && previousState !== 'Moving') {
+                    const targetInfo = stations.find(s => s.id === status.targetStation);
+                    showNotification(`🚀 Bot started moving to ${targetInfo ? targetInfo.name : status.targetStation}`, 'info');
+                } else if (status.state === 'Error') {
+                    const errorMsg = status.error || 'Unknown error occurred';
+                    showNotification(`❌ Error: ${errorMsg}`, 'danger');
+                } else if (status.state === 'Ready' && previousState === 'Moving') {
+                    // Bot finished moving - already handled in station change
+                } else if (status.state === 'Ready') {
+                    // Enable controls when bot is ready
+                    const sendBtn = document.getElementById('sendCommandBtn');
+                    if (!selectedStation) {
+                        sendBtn.disabled = true;
+                    }
+                }
+            }
+            
+            // Store current state for comparison
+            window.botState = status.state || 'Ready';
+            
+            // Check if target station is set but state is not moving (potential issue)
+            if (status.targetStation && status.state === 'Ready' && status.currentStation !== status.targetStation) {
+                console.warn('Warning: Target station set but bot is Ready. Possible communication issue.');
+            }
+        } else {
+            console.warn('No bot status data in Firebase');
+            showNotification('⚠️ No bot status data found in database', 'warning');
         }
+    }, (error) => {
+        console.error('Error listening to bot status:', error);
+        showNotification(`❌ Database error: ${error.message}`, 'danger');
     });
 }
 
