@@ -273,7 +273,13 @@ function setupRealtimeListeners() {
         if (snapshot.exists()) {
             const status = snapshot.val();
             const previousStation = currentStation;
-            const previousState = botState || 'Ready';
+            const previousState = window.botState || 'Ready';
+            
+            // Update last update time and store timestamp
+            if (status.lastUpdated) {
+                updateLastUpdateTime(status.lastUpdated);
+                window.lastUpdateTimestamp = status.lastUpdated;
+            }
             
             // Update current station if changed
             if (status.currentStation && status.currentStation !== currentStation) {
@@ -396,6 +402,146 @@ function updateConnectionStatus(connected) {
     }
 }
 
+// Update last update time display
+function updateLastUpdateTime(timestamp) {
+    const lastUpdateElement = document.getElementById('lastUpdateTime');
+    if (!lastUpdateElement) return;
+    
+    if (!timestamp) {
+        lastUpdateElement.textContent = 'Never';
+        return;
+    }
+    
+    const now = Date.now();
+    const diff = now - timestamp;
+    
+    if (diff < 60000) { // Less than 1 minute
+        lastUpdateElement.textContent = 'Just now';
+    } else if (diff < 3600000) { // Less than 1 hour
+        const minutes = Math.floor(diff / 60000);
+        lastUpdateElement.textContent = `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+    } else {
+        const date = new Date(timestamp);
+        lastUpdateElement.textContent = date.toLocaleTimeString();
+    }
+}
+
+// Manual override function - updates database directly without ESP32
+async function manualOverride() {
+    if (!selectedStation) {
+        showNotification('⚠️ Please select a destination station first', 'warning');
+        return;
+    }
+    
+    // Create a modal to confirm manual override
+    const modal = document.createElement('div');
+    modal.className = 'modal fade show';
+    modal.style.display = 'block';
+    modal.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    
+    const stationInfo = stations.find(s => s.id === selectedStation.id);
+    
+    modal.innerHTML = `
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title">
+                        <i class="bi bi-exclamation-triangle me-2"></i>Manual Override
+                    </h5>
+                    <button type="button" class="btn-close" onclick="this.closest('.modal').remove();"></button>
+                </div>
+                <div class="modal-body">
+                    <p><strong>⚠️ Warning:</strong> This will directly update the database without requiring ESP32 connection.</p>
+                    <p>This is useful for testing or when the physical bot is offline.</p>
+                    <hr>
+                    <p><strong>Selected Station:</strong> ${stationInfo.name}</p>
+                    <p><strong>Current Station:</strong> ${stations.find(s => s.id === currentStation)?.name || currentStation}</p>
+                    <hr>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="overrideAction" id="actionMoving" value="moving" checked>
+                        <label class="form-check-label" for="actionMoving">
+                            Set bot to "Moving" state
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="overrideAction" id="actionArrived" value="arrived">
+                        <label class="form-check-label" for="actionArrived">
+                            Set bot as "Arrived" at selected station
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="overrideAction" id="actionReady" value="ready">
+                        <label class="form-check-label" for="actionReady">
+                            Set bot to "Ready" at selected station
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="this.closest('.modal').remove();">Cancel</button>
+                    <button type="button" class="btn btn-warning" id="confirmOverride">
+                        <i class="bi bi-pencil-square me-2"></i>Apply Override
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Handle override confirmation
+    document.getElementById('confirmOverride').addEventListener('click', async () => {
+        const action = document.querySelector('input[name="overrideAction"]:checked').value;
+        modal.remove();
+        
+        try {
+            const botStatusRef = ref(db, 'bot/status');
+            
+            if (action === 'moving') {
+                await set(botStatusRef, {
+                    currentStation: currentStation,
+                    targetStation: selectedStation.id,
+                    state: 'Moving',
+                    lastUpdated: Date.now(),
+                    manualOverride: true
+                });
+                showNotification(`✅ Manual Override: Bot set to Moving towards ${stationInfo.name}`, 'success');
+            } else if (action === 'arrived') {
+                await set(botStatusRef, {
+                    currentStation: selectedStation.id,
+                    targetStation: '',
+                    state: 'Ready',
+                    lastUpdated: Date.now(),
+                    manualOverride: true
+                });
+                showNotification(`✅ Manual Override: Bot arrived at ${stationInfo.name}`, 'success');
+            } else if (action === 'ready') {
+                await set(botStatusRef, {
+                    currentStation: selectedStation.id,
+                    targetStation: '',
+                    state: 'Ready',
+                    lastUpdated: Date.now(),
+                    manualOverride: true
+                });
+                showNotification(`✅ Manual Override: Bot is Ready at ${stationInfo.name}`, 'success');
+            }
+            
+            // Log the manual override
+            const logRef = ref(db, `bot/logs/${Date.now()}`);
+            await set(logRef, {
+                action: 'manual_override',
+                type: action,
+                station: selectedStation.id,
+                user: currentUser.email,
+                timestamp: Date.now()
+            });
+            
+        } catch (error) {
+            console.error('Error applying manual override:', error);
+            showNotification(`❌ Override failed: ${error.message}`, 'danger');
+        }
+    });
+}
+
 // Show notification
 function showNotification(message, type = 'info') {
     const alertDiv = document.createElement('div');
@@ -420,4 +566,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sendBtn) {
         sendBtn.addEventListener('click', sendBotCommand);
     }
+    
+    const manualOverrideBtn = document.getElementById('manualOverrideBtn');
+    if (manualOverrideBtn) {
+        manualOverrideBtn.addEventListener('click', manualOverride);
+    }
+    
+    // Update last update time every 10 seconds
+    setInterval(() => {
+        if (window.lastUpdateTimestamp) {
+            updateLastUpdateTime(window.lastUpdateTimestamp);
+        }
+    }, 10000);
 });

@@ -168,11 +168,15 @@
                             <strong>Status:</strong>
                             <span id="botStatus" class="badge bg-success">Ready</span>
                         </p>
-                        <p class="mb-0">
+                        <p class="mb-2">
                             <strong>Connection:</strong>
                             <span id="connectionStatus" class="badge bg-secondary">
                                 <i class="bi bi-wifi-off me-1"></i>Disconnected
                             </span>
+                        </p>
+                        <p class="mb-0">
+                            <strong>Last Update:</strong>
+                            <span id="lastUpdateTime" class="text-light small">Never</span>
                         </p>
                     </div>
                     <div class="col-md-4 text-center">
@@ -218,13 +222,18 @@
                 </div>
             </div>
 
-            <!-- Send Command Button -->
+            <!-- Send Command Buttons -->
             <div class="row mt-5">
                 <div class="col-12 text-center">
-                    <button class="btn btn-primary btn-lg" id="sendCommandBtn" disabled>
+                    <button class="btn btn-primary btn-lg me-3" id="sendCommandBtn" disabled>
                         <i class="bi bi-send me-2"></i>Send Bot to Selected Station
                     </button>
+                    <button class="btn btn-warning btn-lg" id="manualOverrideBtn">
+                        <i class="bi bi-pencil-square me-2"></i>Manual Override
+                    </button>
                     <p class="text-muted mt-2" id="selectionHint">Select a destination station above</p>
+                    <p class="text-muted small">Manual Override allows direct database updates without ESP32 connection
+                    </p>
                 </div>
             </div>
         </div>
