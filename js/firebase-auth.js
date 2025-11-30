@@ -90,13 +90,13 @@ async function registerUser(formData) {
         }
         
         if (typeof window.showSuccessMessage === 'function') {
-            window.showSuccessMessage('Account created successfully! Redirecting to home...');
+            window.showSuccessMessage('Account created successfully! Redirecting to control panel...');
         }
 
-        // Redirect to home page after 6.5 seconds
+        // Redirect to control page after 1.5 seconds
         setTimeout(() => {
-            window.location.href = 'index.html';
-        }, 6500);
+            window.location.href = 'control.html';
+        }, 1500);
 
     } catch (error) {
         console.error('Registration error:', error);
@@ -170,13 +170,13 @@ async function loginUser(email, password, rememberMe) {
         }
 
         if (typeof window.showSuccessMessage === 'function') {
-            window.showSuccessMessage('Login successful! Redirecting...');
+            window.showSuccessMessage('Login successful! Redirecting to control panel...');
         }
 
-        // Redirect to home page after 6.5 seconds
+        // Redirect to control page after 1.5 seconds
         setTimeout(() => {
-            window.location.href = 'index.html';
-        }, 6500);
+            window.location.href = 'control.html';
+        }, 1500);
 
     } catch (error) {
         console.error('Login error:', error);
@@ -231,6 +231,12 @@ function checkAuthState() {
             // Update navigation to show "Logged In" instead of Login/Register
             updateNavigationForLoggedInUser(user);
             
+            // Hide "Get Started" button on homepage if present
+            const getStartedBtn = document.getElementById('getStartedBtn');
+            if (getStartedBtn) {
+                getStartedBtn.style.display = 'none';
+            }
+            
             // Get user data from Realtime Database
             try {
                 const userRef = ref(db, 'users/' + user.uid);
@@ -248,6 +254,12 @@ function checkAuthState() {
             // User is signed out
             console.log('No user signed in');
             updateNavigationForLoggedOutUser();
+            
+            // Show "Get Started" button on homepage if present
+            const getStartedBtn = document.getElementById('getStartedBtn');
+            if (getStartedBtn) {
+                getStartedBtn.style.display = 'inline-block';
+            }
         }
     });
 }

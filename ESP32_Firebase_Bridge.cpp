@@ -128,6 +128,9 @@ void loop() {
     // Check for new commands from Firebase
     checkForCommands();
     
+    // Check for manual control commands
+    checkManualControl();
+    
     // Check for status updates from Altera DE10
     checkDE10Status();
   }
@@ -151,6 +154,55 @@ void initializeBotStatus() {
     currentStation = "red";
     Serial.println("Initialized default bot status");
   }
+}
+
+/**
+ * Check for manual control commands from Firebase
+ */
+void checkManualControl() {
+  static String lastCommand = "";
+  static unsigned long lastCommandTime = 0;
+  
+  if (Firebase.RTDB.getString(&fbdo, "/bot/manualControl/command")) {
+    String command = fbdo.stringData();
+    unsigned long commandTime = 0;
+    
+    // Get the timestamp of the command
+    if (Firebase.RTDB.getInt(&fbdo, "/bot/manualControl/timestamp")) {
+      commandTime = fbdo.intData();
+    }
+    
+    // Only process new commands (avoid repeating the same command)
+    if (command.length() > 0 && (command != lastCommand || commandTime != lastCommandTime)) {
+      lastCommand = command;
+      lastCommandTime = commandTime;
+      
+      Serial.print("Manual control command received: ");
+      Serial.println(command);
+      
+      // Send manual control command to Altera DE10
+      sendManualControlToDE10(command);
+    }
+  }
+}
+
+/**
+ * Send manual control command to Altera DE10 board via UART
+ * 
+ * Protocol: "MANUAL:<command>\n"
+ * Commands: FORWARD, REVERSE, LEFT, RIGHT, STOP
+ */
+void sendManualControlToDE10(String command) {
+  String uartCommand = "MANUAL:" + command + "\n";
+  DE10Serial.print(uartCommand);
+  
+  Serial.print("Sent manual control to DE10: ");
+  Serial.println(uartCommand);
+  
+  // Optional: Log manual command to Firebase
+  String logPath = "/bot/manualLogs/" + String(millis());
+  Firebase.RTDB.setString(&fbdo, logPath + "/command", command);
+  Firebase.RTDB.setInt(&fbdo, logPath + "/timestamp", millis());
 }
 
 /**

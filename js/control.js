@@ -45,6 +45,35 @@ let currentStation = 'red'; // Default starting station
 let isConnected = false;
 let connectionCheckInterval = null;
 
+// Station distances (in meters) - estimated distances between stations
+const stationDistances = {
+    'red-blue': 50,
+    'red-green': 75,
+    'red-yellow': 100,
+    'red-purple': 120,
+    'red-orange': 90,
+    'blue-green': 60,
+    'blue-yellow': 80,
+    'blue-purple': 110,
+    'blue-orange': 85,
+    'green-yellow': 65,
+    'green-purple': 95,
+    'green-orange': 70,
+    'yellow-purple': 55,
+    'yellow-orange': 90,
+    'purple-orange': 80
+};
+
+// Calculate distance between two stations
+function calculateDistance(from, to) {
+    if (!from || !to) return 0;
+    
+    const key1 = `${from}-${to}`;
+    const key2 = `${to}-${from}`;
+    
+    return stationDistances[key1] || stationDistances[key2] || 50; // Default 50m if not found
+}
+
 // Check authentication state
 onAuthStateChanged(auth, (user) => {
     if (user) {
@@ -220,8 +249,10 @@ async function sendBotCommand() {
             from: currentStation,
             to: selectedStation.id,
             requestedBy: currentUser.email,
-            timestamp: serverTimestamp(),
-            status: 'pending'
+            timestamp: Date.now(),
+            status: 'pending',
+            distance: calculateDistance(currentStation, selectedStation.id),
+            obstacles: 0 // Will be updated by robot during movement
         });
         
         // Update bot status to set target station
@@ -572,6 +603,9 @@ document.addEventListener('DOMContentLoaded', () => {
         manualOverrideBtn.addEventListener('click', manualOverride);
     }
     
+    // Setup manual control buttons
+    setupManualControl();
+    
     // Update last update time every 10 seconds
     setInterval(() => {
         if (window.lastUpdateTimestamp) {
@@ -579,3 +613,66 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 10000);
 });
+
+// Setup manual control buttons
+function setupManualControl() {
+    const forwardBtn = document.getElementById('forwardBtn');
+    const leftBtn = document.getElementById('leftBtn');
+    const rightBtn = document.getElementById('rightBtn');
+    const reverseBtn = document.getElementById('reverseBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    
+    if (forwardBtn) forwardBtn.addEventListener('click', () => sendManualCommand('FORWARD'));
+    if (leftBtn) leftBtn.addEventListener('click', () => sendManualCommand('LEFT'));
+    if (rightBtn) rightBtn.addEventListener('click', () => sendManualCommand('RIGHT'));
+    if (reverseBtn) reverseBtn.addEventListener('click', () => sendManualCommand('REVERSE'));
+    if (stopBtn) stopBtn.addEventListener('click', () => sendManualCommand('STOP'));
+}
+
+// Send manual control command
+async function sendManualCommand(direction) {
+    const statusDiv = document.getElementById('manualControlStatus');
+    
+    // Check if bot is connected
+    if (!isConnected) {
+        statusDiv.className = 'alert alert-danger';
+        statusDiv.innerHTML = '<i class="bi bi-exclamation-triangle me-2"></i>Bot is not connected! Cannot send manual commands.';
+        showNotification('❌ Bot is not connected! Please check ESP32 connection.', 'danger');
+        return;
+    }
+    
+    try {
+        // Send manual control command to Firebase
+        const manualControlRef = ref(db, 'bot/manualControl');
+        await set(manualControlRef, {
+            command: direction,
+            timestamp: Date.now(),
+            user: currentUser.email
+        });
+        
+        // Update status
+        statusDiv.className = 'alert alert-success';
+        statusDiv.innerHTML = `<i class="bi bi-check-circle me-2"></i>Command sent: ${direction}`;
+        
+        // Log the command
+        const logRef = ref(db, `bot/logs/${Date.now()}`);
+        await set(logRef, {
+            action: 'manual_control',
+            command: direction,
+            user: currentUser.email,
+            timestamp: Date.now()
+        });
+        
+        // Reset status after 2 seconds
+        setTimeout(() => {
+            statusDiv.className = 'alert alert-secondary';
+            statusDiv.innerHTML = '<i class="bi bi-info-circle me-2"></i>Ready to send manual commands';
+        }, 2000);
+        
+    } catch (error) {
+        console.error('Error sending manual command:', error);
+        statusDiv.className = 'alert alert-danger';
+        statusDiv.innerHTML = `<i class="bi bi-exclamation-triangle me-2"></i>Error: ${error.message}`;
+        showNotification(`❌ Failed to send command: ${error.message}`, 'danger');
+    }
+}

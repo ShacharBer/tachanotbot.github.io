@@ -115,6 +115,9 @@
                         <a class="nav-link active" href="control.html">Control</a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="logs.html">Logs</a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="login.html">Login</a>
                     </li>
                     <li class="nav-item">
@@ -234,6 +237,65 @@
                     <p class="text-muted mt-2" id="selectionHint">Select a destination station above</p>
                     <p class="text-muted small">Manual Override allows direct database updates without ESP32 connection
                     </p>
+                </div>
+            </div>
+
+            <!-- Manual Control Section -->
+            <div class="row mt-5">
+                <div class="col-12">
+                    <h3 class="mb-4 text-center">
+                        <i class="bi bi-joystick me-2"></i>Manual Robot Control
+                    </h3>
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-4">
+                                    <h5 class="mb-3">Directional Control</h5>
+                                    <div class="d-flex flex-column align-items-center">
+                                        <!-- Forward Button -->
+                                        <button class="btn btn-success btn-lg mb-2" id="forwardBtn"
+                                            style="width: 120px;">
+                                            <i class="bi bi-arrow-up"></i> Forward
+                                        </button>
+                                        <div class="d-flex gap-2 mb-2">
+                                            <!-- Left Button -->
+                                            <button class="btn btn-success btn-lg" id="leftBtn" style="width: 120px;">
+                                                <i class="bi bi-arrow-left"></i> Left
+                                            </button>
+                                            <!-- Stop Button -->
+                                            <button class="btn btn-danger btn-lg" id="stopBtn" style="width: 120px;">
+                                                <i class="bi bi-stop-circle"></i> Stop
+                                            </button>
+                                            <!-- Right Button -->
+                                            <button class="btn btn-success btn-lg" id="rightBtn" style="width: 120px;">
+                                                <i class="bi bi-arrow-right"></i> Right
+                                            </button>
+                                        </div>
+                                        <!-- Reverse Button -->
+                                        <button class="btn btn-success btn-lg" id="reverseBtn" style="width: 120px;">
+                                            <i class="bi bi-arrow-down"></i> Reverse
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <h5 class="mb-3">Control Info</h5>
+                                    <div class="alert alert-info">
+                                        <p class="mb-2"><strong>Instructions:</strong></p>
+                                        <ul class="mb-0">
+                                            <li>Use directional buttons to control robot movement</li>
+                                            <li>Commands are sent directly to the robot via ESP32</li>
+                                            <li>Press STOP to halt all movement immediately</li>
+                                            <li>Requires active ESP32 connection</li>
+                                        </ul>
+                                    </div>
+                                    <div id="manualControlStatus" class="alert alert-secondary">
+                                        <i class="bi bi-info-circle me-2"></i>
+                                        Ready to send manual commands
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
