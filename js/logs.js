@@ -81,12 +81,15 @@ function showLoginPrompt() {
 async function loadLogs() {
     try {
         const commandsRef = ref(db, 'bot/commands');
+        const logsRef = ref(db, 'bot/logs');
         
-        // Listen for real-time updates
-        onValue(commandsRef, async (snapshot) => {
-            if (snapshot.exists()) {
-                allLogs = [];
-                const commands = snapshot.val();
+        // Listen for real-time updates on commands
+        onValue(commandsRef, async (commandsSnapshot) => {
+            allLogs = [];
+            
+            // Load command logs
+            if (commandsSnapshot.exists()) {
+                const commands = commandsSnapshot.val();
                 
                 // Convert to array and add distance/obstacles data
                 for (const [key, command] of Object.entries(commands)) {
@@ -95,27 +98,49 @@ async function loadLogs() {
                     
                     allLogs.push({
                         id: key,
+                        type: 'command',
                         ...command,
                         distance: distance,
                         obstacles: obstacles
                     });
                 }
-                
-                // Sort by timestamp (newest first)
-                allLogs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-                
-                filteredLogs = [...allLogs];
-                displayLogs();
-                updateStatistics();
-                populateUserFilter();
-            } else {
+            }
+            
+            // Load manual override and control logs
+            try {
+                const logsSnapshot = await get(logsRef);
+                if (logsSnapshot.exists()) {
+                    const logs = logsSnapshot.val();
+                    
+                    for (const [key, log] of Object.entries(logs)) {
+                        allLogs.push({
+                            id: key,
+                            type: log.action || 'manual_action',
+                            ...log
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading manual logs:', error);
+            }
+            
+            if (allLogs.length === 0) {
                 document.getElementById('logsContainer').innerHTML = `
                     <div class="text-center py-5">
                         <i class="bi bi-inbox display-1 text-muted"></i>
                         <p class="mt-3 text-muted">No activity logs found</p>
                     </div>
                 `;
+                return;
             }
+            
+            // Sort by timestamp (newest first)
+            allLogs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+            
+            filteredLogs = [...allLogs];
+            displayLogs();
+            updateStatistics();
+            populateUserFilter();
         });
     } catch (error) {
         console.error('Error loading logs:', error);
@@ -155,46 +180,137 @@ function displayLogs() {
     let html = '';
     
     filteredLogs.forEach(log => {
-        const statusBadge = getStatusBadge(log.status);
         const timestamp = log.timestamp ? new Date(log.timestamp).toLocaleString() : 'Unknown';
-        const fromStation = capitalizeFirst(log.from || 'Unknown');
-        const toStation = capitalizeFirst(log.to || 'Unknown');
+        const user = log.user || log.requestedBy || 'System';
         
-        html += `
-            <div class="card log-card mb-3">
-                <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col-md-8">
-                            <h5 class="card-title mb-2">
-                                <i class="bi bi-arrow-right-circle me-2"></i>
-                                ${fromStation} → ${toStation}
-                                ${statusBadge}
-                            </h5>
-                            <p class="card-text mb-2">
-                                <i class="bi bi-person me-2"></i>
-                                <strong>User:</strong> ${log.requestedBy || 'System'}
-                            </p>
-                            <p class="card-text mb-2">
-                                <i class="bi bi-clock me-2"></i>
-                                <strong>Time:</strong> ${timestamp}
-                            </p>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="text-end">
-                                <p class="mb-1">
-                                    <i class="bi bi-rulers me-2"></i>
-                                    <strong>Distance:</strong> ${log.distance}m
+        // Determine log type and display accordingly
+        if (log.type === 'command' || (log.from && log.to)) {
+            // Regular command log
+            const statusBadge = getStatusBadge(log.status);
+            const fromStation = capitalizeFirst(log.from || 'Unknown');
+            const toStation = capitalizeFirst(log.to || 'Unknown');
+            
+            html += `
+                <div class="card log-card mb-3">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <h5 class="card-title mb-2">
+                                    <i class="bi bi-arrow-right-circle me-2"></i>
+                                    ${fromStation} → ${toStation}
+                                    ${statusBadge}
+                                </h5>
+                                <p class="card-text mb-2">
+                                    <i class="bi bi-person me-2"></i>
+                                    <strong>User:</strong> ${user}
                                 </p>
-                                <p class="mb-0">
-                                    <i class="bi bi-shield-exclamation me-2"></i>
-                                    <strong>Obstacles:</strong> ${log.obstacles}
+                                <p class="card-text mb-2">
+                                    <i class="bi bi-clock me-2"></i>
+                                    <strong>Time:</strong> ${timestamp}
+                                </p>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="text-end">
+                                    <p class="mb-1">
+                                        <i class="bi bi-rulers me-2"></i>
+                                        <strong>Distance:</strong> ${log.distance || 0}m
+                                    </p>
+                                    <p class="mb-0">
+                                        <i class="bi bi-shield-exclamation me-2"></i>
+                                        <strong>Obstacles:</strong> ${log.obstacles || 0}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else if (log.type === 'manual_override' || log.action === 'manual_override') {
+            // Manual override log
+            const overrideType = log.type || 'unknown';
+            const station = capitalizeFirst(log.station || 'Unknown');
+            const overrideTypeBadge = getOverrideTypeBadge(overrideType);
+            
+            html += `
+                <div class="card log-card mb-3" style="border-left-color: #ffc107;">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-12">
+                                <h5 class="card-title mb-2">
+                                    <i class="bi bi-pencil-square me-2 text-warning"></i>
+                                    Manual Override
+                                    ${overrideTypeBadge}
+                                </h5>
+                                <p class="card-text mb-2">
+                                    <i class="bi bi-building me-2"></i>
+                                    <strong>Station:</strong> ${station}
+                                </p>
+                                <p class="card-text mb-2">
+                                    <i class="bi bi-person me-2"></i>
+                                    <strong>User:</strong> ${user}
+                                </p>
+                                <p class="card-text mb-2">
+                                    <i class="bi bi-clock me-2"></i>
+                                    <strong>Time:</strong> ${timestamp}
                                 </p>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        `;
+            `;
+        } else if (log.type === 'manual_control' || log.action === 'manual_control') {
+            // Manual control log
+            const command = log.command || 'UNKNOWN';
+            const commandBadge = getCommandBadge(command);
+            
+            html += `
+                <div class="card log-card mb-3" style="border-left-color: #17a2b8;">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-12">
+                                <h5 class="card-title mb-2">
+                                    <i class="bi bi-joystick me-2 text-info"></i>
+                                    Manual Control
+                                    ${commandBadge}
+                                </h5>
+                                <p class="card-text mb-2">
+                                    <i class="bi bi-person me-2"></i>
+                                    <strong>User:</strong> ${user}
+                                </p>
+                                <p class="card-text mb-2">
+                                    <i class="bi bi-clock me-2"></i>
+                                    <strong>Time:</strong> ${timestamp}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            // Unknown log type
+            html += `
+                <div class="card log-card mb-3" style="border-left-color: #6c757d;">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-12">
+                                <h5 class="card-title mb-2">
+                                    <i class="bi bi-question-circle me-2"></i>
+                                    Unknown Activity
+                                </h5>
+                                <p class="card-text mb-2">
+                                    <i class="bi bi-person me-2"></i>
+                                    <strong>User:</strong> ${user}
+                                </p>
+                                <p class="card-text mb-2">
+                                    <i class="bi bi-clock me-2"></i>
+                                    <strong>Time:</strong> ${timestamp}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
     });
     
     container.innerHTML = html;
@@ -213,14 +329,46 @@ function getStatusBadge(status) {
     return badges[status] || '<span class="badge bg-secondary ms-2">Unknown</span>';
 }
 
+// Get override type badge HTML
+function getOverrideTypeBadge(type) {
+    const badges = {
+        'moving': '<span class="badge bg-warning text-dark ms-2">Set to Moving</span>',
+        'arrived': '<span class="badge bg-success ms-2">Arrived</span>',
+        'ready': '<span class="badge bg-info ms-2">Set to Ready</span>'
+    };
+    
+    return badges[type] || '<span class="badge bg-warning text-dark ms-2">Override</span>';
+}
+
+// Get command badge HTML for manual control
+function getCommandBadge(command) {
+    const badges = {
+        'FORWARD': '<span class="badge bg-primary ms-2"><i class="bi bi-arrow-up"></i> Forward</span>',
+        'REVERSE': '<span class="badge bg-secondary ms-2"><i class="bi bi-arrow-down"></i> Reverse</span>',
+        'LEFT': '<span class="badge bg-info ms-2"><i class="bi bi-arrow-left"></i> Left</span>',
+        'RIGHT': '<span class="badge bg-info ms-2"><i class="bi bi-arrow-right"></i> Right</span>',
+        'STOP': '<span class="badge bg-danger ms-2"><i class="bi bi-stop-circle"></i> Stop</span>'
+    };
+    
+    return badges[command] || `<span class="badge bg-secondary ms-2">${command}</span>`;
+}
+
 // Update statistics
 function updateStatistics() {
-    const totalCommands = allLogs.length;
-    const totalDistance = allLogs.reduce((sum, log) => sum + (log.distance || 0), 0);
-    const totalObstacles = allLogs.reduce((sum, log) => sum + (log.obstacles || 0), 0);
+    const commandLogs = allLogs.filter(log => log.type === 'command' || (log.from && log.to));
+    const manualOverrideLogs = allLogs.filter(log => log.type === 'manual_override' || log.action === 'manual_override');
+    const manualControlLogs = allLogs.filter(log => log.type === 'manual_control' || log.action === 'manual_control');
+    
+    const totalCommands = commandLogs.length;
+    const totalManualOverrides = manualOverrideLogs.length;
+    const totalManualControls = manualControlLogs.length;
+    const totalDistance = commandLogs.reduce((sum, log) => sum + (log.distance || 0), 0);
+    const totalObstacles = commandLogs.reduce((sum, log) => sum + (log.obstacles || 0), 0);
     const avgDistance = totalCommands > 0 ? Math.round(totalDistance / totalCommands) : 0;
     
     document.getElementById('totalCommands').textContent = totalCommands;
+    document.getElementById('totalManualOverrides').textContent = totalManualOverrides;
+    document.getElementById('totalManualControls').textContent = totalManualControls;
     document.getElementById('totalDistance').textContent = `${totalDistance}m`;
     document.getElementById('totalObstacles').textContent = totalObstacles;
     document.getElementById('avgDistance').textContent = `${avgDistance}m`;
@@ -228,7 +376,7 @@ function updateStatistics() {
 
 // Populate user filter dropdown
 function populateUserFilter() {
-    const users = [...new Set(allLogs.map(log => log.requestedBy).filter(Boolean))];
+    const users = [...new Set(allLogs.map(log => log.requestedBy || log.user).filter(Boolean))];
     const select = document.getElementById('filterUser');
     
     // Keep "All Users" option
@@ -247,6 +395,7 @@ function populateUserFilter() {
 
 // Setup filters
 function setupFilters() {
+    document.getElementById('filterType').addEventListener('change', applyFilters);
     document.getElementById('filterStatus').addEventListener('change', applyFilters);
     document.getElementById('filterUser').addEventListener('change', applyFilters);
     document.getElementById('sortBy').addEventListener('change', applyFilters);
@@ -254,15 +403,31 @@ function setupFilters() {
 
 // Apply filters
 function applyFilters() {
+    const typeFilter = document.getElementById('filterType').value;
     const statusFilter = document.getElementById('filterStatus').value;
     const userFilter = document.getElementById('filterUser').value;
     const sortBy = document.getElementById('sortBy').value;
     
     // Filter logs
     filteredLogs = allLogs.filter(log => {
+        // Type filter
+        let typeMatch = true;
+        if (typeFilter !== 'all') {
+            if (typeFilter === 'command') {
+                typeMatch = log.type === 'command' || (log.from && log.to);
+            } else {
+                typeMatch = log.type === typeFilter || log.action === typeFilter;
+            }
+        }
+        
+        // Status filter (only applies to commands)
         const statusMatch = statusFilter === 'all' || log.status === statusFilter;
-        const userMatch = userFilter === 'all' || log.requestedBy === userFilter;
-        return statusMatch && userMatch;
+        
+        // User filter
+        const logUser = log.requestedBy || log.user;
+        const userMatch = userFilter === 'all' || logUser === userFilter;
+        
+        return typeMatch && statusMatch && userMatch;
     });
     
     // Sort logs

@@ -563,7 +563,9 @@ async function manualOverride() {
                 type: action,
                 station: selectedStation.id,
                 user: currentUser.email,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                from: currentStation,
+                to: selectedStation.id
             });
             
         } catch (error) {

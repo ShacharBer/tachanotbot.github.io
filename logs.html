@@ -151,25 +151,37 @@
 
             <!-- Statistics -->
             <div class="row mb-4">
-                <div class="col-md-3 mb-3">
+                <div class="col-md-2 mb-3">
                     <div class="stats-card text-center">
                         <h3 id="totalCommands">0</h3>
-                        <p class="mb-0">Total Commands</p>
+                        <p class="mb-0">Commands</p>
                     </div>
                 </div>
-                <div class="col-md-3 mb-3">
+                <div class="col-md-2 mb-3">
+                    <div class="stats-card text-center">
+                        <h3 id="totalManualOverrides">0</h3>
+                        <p class="mb-0">Overrides</p>
+                    </div>
+                </div>
+                <div class="col-md-2 mb-3">
+                    <div class="stats-card text-center">
+                        <h3 id="totalManualControls">0</h3>
+                        <p class="mb-0">Manual Controls</p>
+                    </div>
+                </div>
+                <div class="col-md-2 mb-3">
                     <div class="stats-card text-center">
                         <h3 id="totalDistance">0 m</h3>
                         <p class="mb-0">Total Distance</p>
                     </div>
                 </div>
-                <div class="col-md-3 mb-3">
+                <div class="col-md-2 mb-3">
                     <div class="stats-card text-center">
                         <h3 id="totalObstacles">0</h3>
-                        <p class="mb-0">Obstacles Avoided</p>
+                        <p class="mb-0">Obstacles</p>
                     </div>
                 </div>
-                <div class="col-md-3 mb-3">
+                <div class="col-md-2 mb-3">
                     <div class="stats-card text-center">
                         <h3 id="avgDistance">0 m</h3>
                         <p class="mb-0">Avg Distance</p>
@@ -180,7 +192,16 @@
             <!-- Filters -->
             <div class="filter-section">
                 <div class="row">
-                    <div class="col-md-4 mb-3">
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Filter by Type</label>
+                        <select class="form-select" id="filterType">
+                            <option value="all">All Types</option>
+                            <option value="command">Commands</option>
+                            <option value="manual_override">Manual Overrides</option>
+                            <option value="manual_control">Manual Control</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-3">
                         <label class="form-label">Filter by Status</label>
                         <select class="form-select" id="filterStatus">
                             <option value="all">All Status</option>
@@ -190,13 +211,13 @@
                             <option value="error">Error</option>
                         </select>
                     </div>
-                    <div class="col-md-4 mb-3">
+                    <div class="col-md-3 mb-3">
                         <label class="form-label">Filter by User</label>
                         <select class="form-select" id="filterUser">
                             <option value="all">All Users</option>
                         </select>
                     </div>
-                    <div class="col-md-4 mb-3">
+                    <div class="col-md-3 mb-3">
                         <label class="form-label">Sort By</label>
                         <select class="form-select" id="sortBy">
                             <option value="newest">Newest First</option>
