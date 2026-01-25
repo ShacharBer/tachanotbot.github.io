@@ -79,10 +79,14 @@ onAuthStateChanged(auth, (user) => {
     if (user) {
         currentUser = user;
         showControlPanel();
-        loadBotStatus();
-        loadStations();
-        setupRealtimeListeners();
-        startConnectionMonitoring();
+        
+        // Give DOM time to render before setting up listeners
+        setTimeout(() => {
+            loadBotStatus();
+            loadStations();
+            setupRealtimeListeners();
+            startConnectionMonitoring();
+        }, 100);
     } else {
         showLoginPrompt();
         stopConnectionMonitoring();
@@ -368,6 +372,63 @@ function setupRealtimeListeners() {
     }, (error) => {
         console.error('Error listening to bot status:', error);
         showNotification(`❌ Database error: ${error.message}`, 'danger');
+    });
+
+    // Listen for fromAltera data changes
+    const alteraRef = ref(db, 'fromAltera');
+    onValue(alteraRef, (snapshot) => {
+        console.log('📥 fromAltera snapshot received');
+        
+        if (snapshot.exists()) {
+            const data = snapshot.val();
+            console.log('✅ fromAltera data:', data);
+            
+            // Firebase uses uppercase A, B, C
+            const valueA = data.A !== undefined && data.A !== null ? data.A : '--';
+            const valueB = data.B !== undefined && data.B !== null ? data.B : '--';
+            const valueC = data.C !== undefined && data.C !== null ? data.C : '--';
+            
+            console.log('  - A:', valueA);
+            console.log('  - B:', valueB);
+            console.log('  - C:', valueC);
+            
+            // Update the display values
+            const elemA = document.getElementById('alteraValueA');
+            const elemB = document.getElementById('alteraValueB');
+            const elemC = document.getElementById('alteraValueC');
+            
+            if (elemA) {
+                elemA.textContent = valueA;
+                console.log('✅ Set alteraValueA to:', valueA);
+            }
+            
+            if (elemB) {
+                elemB.textContent = valueB;
+                console.log('✅ Set alteraValueB to:', valueB);
+            }
+            
+            if (elemC) {
+                elemC.textContent = valueC;
+                console.log('✅ Set alteraValueC to:', valueC);
+            }
+            
+            // Update color sensor display
+            const colorValue = data.C !== undefined && data.C !== null ? parseInt(data.C) : 0;
+            console.log('🎨 Calling updateColorSensor with:', colorValue);
+            updateColorSensor(colorValue);
+        } else {
+            console.log('⚠️ No data in fromAltera');
+            const elemA = document.getElementById('alteraValueA');
+            const elemB = document.getElementById('alteraValueB');
+            const elemC = document.getElementById('alteraValueC');
+            
+            if (elemA) elemA.textContent = '--';
+            if (elemB) elemB.textContent = '--';
+            if (elemC) elemC.textContent = '--';
+            updateColorSensor(0);
+        }
+    }, (error) => {
+        console.error('❌ Error listening to fromAltera data:', error);
     });
 }
 
@@ -676,5 +737,203 @@ async function sendManualCommand(direction) {
         statusDiv.className = 'alert alert-danger';
         statusDiv.innerHTML = `<i class="bi bi-exclamation-triangle me-2"></i>Error: ${error.message}`;
         showNotification(`❌ Failed to send command: ${error.message}`, 'danger');
+    }
+}
+
+// Send data to toAltera
+window.sendToAltera = async function() {
+    const input = document.getElementById('toAlteraInput');
+    const status = document.getElementById('sendStatus');
+    const value = input.value.trim();
+
+    if (!currentUser) {
+        status.style.display = 'block';
+        status.className = 'alert alert-danger';
+        status.textContent = '❌ Please login first';
+        return;
+    }
+
+    if (!value) {
+        status.style.display = 'block';
+        status.className = 'alert alert-warning';
+        status.textContent = '⚠️ Please enter some data';
+        return;
+    }
+
+    try {
+        console.log('📤 Sending to toAltera:', value);
+        const toAlteraRef = ref(db, 'toAltera');
+        await set(toAlteraRef, value);
+        
+        status.style.display = 'block';
+        status.className = 'alert alert-success';
+        status.innerHTML = `<i class="bi bi-check-circle me-2"></i>Data sent successfully!`;
+        console.log('✅ Data sent to toAltera');
+        
+        input.value = '';
+        
+        // Hide status after 3 seconds
+        setTimeout(() => {
+            status.style.display = 'none';
+        }, 3000);
+        
+    } catch (error) {
+        console.error('❌ Error sending data:', error);
+        status.style.display = 'block';
+        status.className = 'alert alert-danger';
+        status.innerHTML = `<i class="bi bi-exclamation-triangle me-2"></i>Error: ${error.message}`;
+    }
+}
+
+// Send manual command (direction, container, etc) to toAltera
+window.sendManualCommand = async function(commandValue) {
+    if (!currentUser) {
+        showNotification('❌ Please login first', 'danger');
+        return;
+    }
+
+    try {
+        console.log('📤 Sending command to toAltera:', commandValue);
+        const toAlteraRef = ref(db, 'toAltera');
+        await set(toAlteraRef, commandValue);
+        
+        const statusDiv = document.getElementById('manualControlStatus');
+        statusDiv.className = 'alert alert-success';
+        
+        let commandName = 'Command';
+        if (commandValue === 10) commandName = 'Forward';
+        else if (commandValue === 5) commandName = 'Reverse';
+        else if (commandValue === 6) commandName = 'Left';
+        else if (commandValue === 9) commandName = 'Right';
+        else if (commandValue === 0) commandName = 'Stop';
+        else if (commandValue === 127) commandName = 'Open Container';
+        else if (commandValue === 64) commandName = 'Close Container';
+        
+        statusDiv.innerHTML = `<i class="bi bi-check-circle me-2"></i>${commandName} (${commandValue}) sent`;
+        console.log(`✅ ${commandName} sent to toAltera`);
+        
+        // Reset status after 2 seconds
+        setTimeout(() => {
+            statusDiv.className = 'alert alert-secondary';
+            statusDiv.innerHTML = '<i class="bi bi-info-circle me-2"></i>Ready to send manual commands';
+        }, 2000);
+        
+    } catch (error) {
+        console.error('❌ Error sending command:', error);
+        showNotification(`❌ Failed to send command: ${error.message}`, 'danger');
+    }
+}
+
+// Update light slider display
+window.updateLightValue = function(value) {
+    const lightValue = document.getElementById('lightValue');
+    value = parseInt(value);
+    
+    if (value == 128) {
+        lightValue.textContent = `OFF (${value})`;
+        lightValue.className = 'badge bg-secondary';
+    } else if (value >= 132 && value <= 135) {
+        lightValue.textContent = `ON (${value})`;
+        lightValue.className = 'badge bg-warning';
+    } else {
+        // Skip 129-131
+        lightValue.textContent = `Invalid (${value})`;
+        lightValue.className = 'badge bg-danger';
+    }
+}
+
+// Snap slider to valid values (skip 129-131)
+window.snapLightValue = function(slider) {
+    const value = parseInt(slider.value);
+    
+    // If in invalid range (129-131), snap to nearest valid value
+    if (value >= 129 && value <= 131) {
+        if (value == 129) {
+            slider.value = 128; // Snap to OFF
+        } else {
+            slider.value = 132; // Snap to lowest ON
+        }
+        updateLightValue(slider.value);
+    }
+}
+
+// Send light command to toAltera
+window.sendLightCommand = async function() {
+    if (!currentUser) {
+        showNotification('❌ Please login first', 'danger');
+        return;
+    }
+
+    const slider = document.getElementById('lightSlider');
+    const value = parseInt(slider.value);
+
+    // Validate value (only 128 or 132-135)
+    if (value !== 128 && (value < 132 || value > 135)) {
+        showNotification('❌ Invalid light value. Use 128 (OFF) or 132-135 (ON)', 'danger');
+        return;
+    }
+
+    try {
+        console.log('💡 Sending light command to toAltera:', value);
+        const toAlteraRef = ref(db, 'toAltera');
+        await set(toAlteraRef, value);
+        
+        const statusDiv = document.getElementById('manualControlStatus');
+        statusDiv.className = 'alert alert-success';
+        statusDiv.innerHTML = `<i class="bi bi-lightbulb me-2"></i>Light ${value === 128 ? 'OFF' : 'ON'} (${value}) sent`;
+        console.log(`✅ Light command sent to toAltera`);
+        
+        // Reset status after 2 seconds
+        setTimeout(() => {
+            statusDiv.className = 'alert alert-secondary';
+            statusDiv.innerHTML = '<i class="bi bi-info-circle me-2"></i>Ready to send manual commands';
+        }, 2000);
+        
+    } catch (error) {
+        console.error('❌ Error sending light command:', error);
+        showNotification(`❌ Failed to send light command: ${error.message}`, 'danger');
+    }
+}
+
+// Update color sensor display based on value
+function updateColorSensor(colorValue) {
+    const colorSensor = document.getElementById('colorSensor');
+    const colorSensorText = document.getElementById('colorSensorText');
+    
+    if (!colorSensor || !colorSensorText) {
+        console.log('⚠️ Color sensor elements not found');
+        return;
+    }
+    
+    // Convert to number if string
+    const color = typeof colorValue === 'string' ? parseInt(colorValue) : colorValue;
+    
+    console.log(`🎨 Updating color sensor with value: ${color} (type: ${typeof color})`);
+    
+    switch(color) {
+        case 0:
+            colorSensor.style.backgroundColor = '#999';
+            colorSensorText.textContent = 'No Color';
+            console.log('🎨 Color Sensor: No Color (0)');
+            break;
+        case 1:
+            colorSensor.style.backgroundColor = '#dc3545';
+            colorSensorText.textContent = 'Red';
+            console.log('🎨 Color Sensor: Red (1)');
+            break;
+        case 2:
+            colorSensor.style.backgroundColor = '#198754';
+            colorSensorText.textContent = 'Green';
+            console.log('🎨 Color Sensor: Green (2)');
+            break;
+        case 4:
+            colorSensor.style.backgroundColor = '#0d6efd';
+            colorSensorText.textContent = 'Blue';
+            console.log('🎨 Color Sensor: Blue (4)');
+            break;
+        default:
+            colorSensor.style.backgroundColor = '#999';
+            colorSensorText.textContent = `Unknown (${color})`;
+            console.log(`🎨 Color Sensor: Unknown value (${color})`);
     }
 }

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase Test - TachanotBOT</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .value-box {
+            display: inline-block;
+            background: #e3f2fd;
+            padding: 20px;
+            margin: 10px;
+            border-radius: 5px;
+            min-width: 150px;
+            text-align: center;
+        }
+
+        .value-box h3 {
+            margin: 0 0 10px 0;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .value-box .value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #1976d2;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <h1>🔥 Firebase Test</h1>
+        <p id="status">Loading...</p>
+    </div>
+
+    <div class="card">
+        <h2>fromAltera Data</h2>
+        <div class="value-box">
+            <h3>Value A</h3>
+            <div class="value" id="valueA">--</div>
+        </div>
+        <div class="value-box">
+            <h3>Value B</h3>
+            <div class="value" id="valueB">--</div>
+        </div>
+        <div class="value-box">
+            <h3>Value C</h3>
+            <div class="value" id="valueC">--</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Send to toAltera</h2>
+        <input type="text" id="toAlteraInput" placeholder="Type data here..."
+            style="width: 100%; padding: 10px; font-size: 16px; border: 2px solid #ddd; border-radius: 5px;">
+        <button onclick="sendToAltera()"
+            style="margin-top: 10px; padding: 10px 20px; background: #1976d2; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;">
+            📤 Send to toAltera
+        </button>
+        <div id="sendStatus" style="margin-top: 10px; padding: 10px; border-radius: 5px; display: none;"></div>
+    </div>
+
+    <script>
+        console.log('====== PAGE LOADED ======');
+        document.getElementById('status').textContent = 'Page loaded, checking Firebase...';
+    </script>
+
+    <script type="module">
+        console.log('====== MODULE SCRIPT STARTING ======');
+
+        try {
+            console.log('Importing firebase-config...');
+            const { auth, db } = await import('./js/firebase-config.js');
+            console.log('✅ firebase-config imported');
+
+            console.log('Importing Firebase modules...');
+            const { onAuthStateChanged } = await import("https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js");
+            const { ref, onValue, set } = await import("https://www.gstatic.com/firebasejs/12.5.0/firebase-database.js");
+            console.log('✅ Firebase modules imported');
+
+            let currentUser = null;
+
+            console.log('Setting up auth listener...');
+            onAuthStateChanged(auth, (user) => {
+                console.log('====== AUTH STATE CHANGED ======');
+                currentUser = user;
+                if (user) {
+                    console.log('✅ User logged in:', user.email);
+                    document.getElementById('status').textContent = 'Logged in as ' + user.email;
+
+                    const alteraRef = ref(db, 'fromAltera');
+                    console.log('📡 Setting up listener for fromAltera...');
+
+                    onValue(alteraRef, (snapshot) => {
+                        console.log('====== SNAPSHOT RECEIVED ======');
+                        if (snapshot.exists()) {
+                            const data = snapshot.val();
+                            console.log('✅ fromAltera data:', data);
+                            console.log('  - a:', data.a);
+                            console.log('  - b:', data.b);
+                            console.log('  - c:', data.c);
+
+                            document.getElementById('valueA').textContent = data.a ?? '--';
+                            document.getElementById('valueB').textContent = data.b ?? '--';
+                            document.getElementById('valueC').textContent = data.c ?? '--';
+                        } else {
+                            console.log('⚠️ No data in fromAltera');
+                        }
+                    }, (error) => {
+                        console.error('❌ Error reading fromAltera:', error);
+                    });
+                } else {
+                    console.log('❌ Not logged in');
+                    document.getElementById('status').textContent = 'Not logged in - please login first';
+                }
+            });
+
+            window.sendToAltera = async function () {
+                console.log('====== SEND BUTTON CLICKED ======');
+                const input = document.getElementById('toAlteraInput');
+                const status = document.getElementById('sendStatus');
+                const value = input.value.trim();
+
+                if (!currentUser) {
+                    console.log('❌ No user logged in');
+                    status.style.display = 'block';
+                    status.style.background = '#f8d7da';
+                    status.style.color = '#721c24';
+                    status.textContent = '❌ Please login first';
+                    return;
+                }
+
+                if (!value) {
+                    console.log('⚠️ No value entered');
+                    status.style.display = 'block';
+                    status.style.background = '#fff3cd';
+                    status.style.color = '#856404';
+                    status.textContent = '⚠️ Please enter some data';
+                    return;
+                }
+
+                try {
+                    console.log('📤 Sending to toAltera:', value);
+                    const toAlteraRef = ref(db, 'toAltera');
+                    await set(toAlteraRef, value);
+
+                    status.style.display = 'block';
+                    status.style.background = '#d4edda';
+                    status.style.color = '#155724';
+                    status.textContent = '✅ Data sent successfully!';
+                    console.log('✅ Data sent to toAltera');
+
+                    input.value = '';
+                } catch (error) {
+                    console.error('❌ Error sending data:', error);
+                    status.style.display = 'block';
+                    status.style.background = '#f8d7da';
+                    status.style.color = '#721c24';
+                    status.textContent = '❌ Error: ' + error.message;
+                }
+            }
+
+        } catch (error) {
+            console.error('====== FATAL ERROR ======');
+            console.error(error);
+            document.getElementById('status').textContent = 'ERROR: ' + error.message;
+        }
+    </script>
+</body>
+
+</html>
