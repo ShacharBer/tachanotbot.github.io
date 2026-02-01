@@ -63,8 +63,17 @@
 
         .station-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        @media (max-width: 768px) {
+            .station-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
         }
 
         .control-section {
@@ -249,51 +258,16 @@
                 </div>
             </div>
 
-            <!-- Current Station Display -->
-            <div class="row mb-4">
-                <div class="col-12">
-                    <h3 class="mb-4">
-                        <i class="bi bi-geo-alt-fill me-2"></i>Current Location
-                    </h3>
-                    <div class="card station-card current" id="currentStationCard">
-                        <div class="card-body text-center p-4">
-                            <div class="station-indicator" id="currentStationColor">
-                                <i class="bi bi-building"></i>
-                            </div>
-                            <h4 class="card-title mb-2" id="currentStationTitle">Loading...</h4>
-                            <p class="text-muted mb-0">
-                                <i class="bi bi-check-circle-fill text-success me-1"></i>
-                                Current Position
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <!-- Available Stations -->
             <div class="row">
                 <div class="col-12">
-                    <h3 class="mb-4">
+                    <h3 class="mb-4 text-center">
                         <i class="bi bi-signpost-split me-2"></i>Select Destination Station
                     </h3>
                     <div class="station-grid" id="stationGrid">
                         <!-- Stations will be loaded here dynamically -->
                     </div>
-                </div>
-            </div>
-
-            <!-- Send Command Buttons -->
-            <div class="row mt-5">
-                <div class="col-12 text-center">
-                    <button class="btn btn-primary btn-lg me-3" id="sendCommandBtn" disabled>
-                        <i class="bi bi-send me-2"></i>Send Bot to Selected Station
-                    </button>
-                    <button class="btn btn-warning btn-lg" id="manualOverrideBtn">
-                        <i class="bi bi-pencil-square me-2"></i>Manual Override
-                    </button>
-                    <p class="text-muted mt-2" id="selectionHint">Select a destination station above</p>
-                    <p class="text-muted small">Manual Override allows direct database updates without ESP32 connection
-                    </p>
+                    <p class="text-muted text-center mt-4" id="selectionHint">Click a station to send command</p>
                 </div>
             </div>
 
@@ -352,16 +326,29 @@
                                     </div>
                                     <h5 class="mb-3 mt-4">Light Control</h5>
                                     <div class="d-flex flex-column align-items-center">
-                                        <label for="lightSlider" class="form-label">Light Intensity</label>
-                                        <input type="range" class="form-range" id="lightSlider" min="128" max="135"
-                                            value="128" step="1" oninput="updateLightValue(this.value)"
-                                            onchange="snapLightValue(this)" style="width: 150px;">
+                                        <button class="btn btn-lg" id="lightToggleBtn" onclick="toggleLight()"
+                                            style="width: 150px; background-color: #6c757d; color: white;" data-state="off">
+                                            <i class="bi bi-lightbulb"></i> Light OFF
+                                        </button>
                                         <div class="mt-2">
-                                            <span class="badge bg-info" id="lightValue">OFF (128)</span>
+                                            <span class="badge bg-secondary" id="lightValue">OFF (128)</span>
                                         </div>
-                                        <button class="btn btn-secondary btn-sm mt-2" onclick="sendLightCommand()"
+                                    </div>
+                                    <h5 class="mb-3 mt-4">Mode Control</h5>
+                                    <div class="d-flex flex-column align-items-center">
+                                        <button class="btn btn-lg" id="modeToggleBtn" onclick="toggleMode()"
+                                            style="width: 150px; background-color: #fd7e14; color: white;" data-state="manual">
+                                            <i class="bi bi-hand-index"></i> Manual Mode
+                                        </button>
+                                        <div class="mt-2">
+                                            <span class="badge bg-warning" id="modeValue">MANUAL (201)</span>
+                                        </div>
+                                    </div>
+                                    <h5 class="mb-3 mt-4">Clear</h5>
+                                    <div class="d-flex flex-column align-items-center">
+                                        <button class="btn btn-danger btn-lg" onclick="sendClearCommand()"
                                             style="width: 150px;">
-                                            <i class="bi bi-lightbulb"></i> Apply Light
+                                            <i class="bi bi-x-circle"></i> Clear
                                         </button>
                                     </div>
                                 </div>
@@ -377,6 +364,13 @@
                                             <li>Open Container: 127</li>
                                             <li>Close Container: 64</li>
                                             <li>Light: 128 (off) - 135 (on)</li>
+                                            <li>manual mode: 201</li>
+                                            <li>auto mode: 200</li>
+                                            <li>clear: 192</li>
+                                            <li>goto red: 228</li>
+                                            <li>goto green: 229</li>
+                                            <li>goto blue: 230</li>
+                                            
                                         </ul>
                                     </div>
                                     <div id="manualControlStatus" class="alert alert-secondary">

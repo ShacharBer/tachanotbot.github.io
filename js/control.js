@@ -29,21 +29,16 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
 
-// Station definitions with colors
+// Station definitions with colors and command values
 const stations = [
-    { id: 'red', name: 'Red Station', color: '#dc3545' },
-    { id: 'blue', name: 'Blue Station', color: '#0d6efd' },
-    { id: 'green', name: 'Green Station', color: '#198754' },
-    { id: 'yellow', name: 'Yellow Station', color: '#ffc107' },
-    { id: 'purple', name: 'Purple Station', color: '#6f42c1' },
-    { id: 'orange', name: 'Orange Station', color: '#fd7e14' }
+    { id: 'red', name: 'Red Station', color: '#dc3545', command: 228 },
+    { id: 'green', name: 'Green Station', color: '#198754', command: 229 },
+    { id: 'blue', name: 'Blue Station', color: '#0d6efd', command: 232 }
 ];
 
 let currentUser = null;
 let selectedStation = null;
 let currentStation = 'red'; // Default starting station
-let isConnected = false;
-let connectionCheckInterval = null;
 
 // Station distances (in meters) - estimated distances between stations
 const stationDistances = {
@@ -85,11 +80,9 @@ onAuthStateChanged(auth, (user) => {
             loadBotStatus();
             loadStations();
             setupRealtimeListeners();
-            startConnectionMonitoring();
         }, 100);
     } else {
         showLoginPrompt();
-        stopConnectionMonitoring();
     }
 });
 
@@ -137,11 +130,6 @@ function loadStations() {
     stationGrid.innerHTML = '';
     
     stations.forEach(station => {
-        // Skip current station from available destinations
-        if (station.id === currentStation) {
-            return;
-        }
-        
         const stationCard = document.createElement('div');
         stationCard.className = 'station-card card';
         stationCard.dataset.stationId = station.id;
@@ -151,7 +139,7 @@ function loadStations() {
                     <i class="bi bi-building"></i>
                 </div>
                 <h5 class="card-title">${station.name}</h5>
-                <p class="text-muted small mb-0">Click to select</p>
+                <p class="text-muted small mb-0">Click to send ${station.command}</p>
             </div>
         `;
         
@@ -190,8 +178,13 @@ function updateBotStatus(status) {
     }
 }
 
-// Select a destination station
-function selectStation(station) {
+// Select a destination station and send command immediately
+async function selectStation(station) {
+    if (!currentUser) {
+        showNotification('❌ Please login first', 'danger');
+        return;
+    }
+    
     // Remove previous selection
     document.querySelectorAll('.station-card').forEach(card => {
         card.classList.remove('selected');
@@ -203,102 +196,23 @@ function selectStation(station) {
     
     selectedStation = station;
     
-    // Enable send button
-    document.getElementById('sendCommandBtn').disabled = false;
-    document.getElementById('selectionHint').textContent = `Selected: ${station.name}`;
-}
-
-// Send command to move bot
-async function sendBotCommand() {
-    if (!selectedStation) {
-        showNotification('Please select a destination station', 'warning');
-        return;
-    }
-    
-    // Check if bot is connected
-    if (!isConnected) {
-        showNotification('❌ Bot is not connected! Please check ESP32 connection.', 'danger');
-        return;
-    }
-    
-    const sendBtn = document.getElementById('sendCommandBtn');
-    const originalText = sendBtn.innerHTML;
-    
     try {
-        // Show loading state
-        sendBtn.disabled = true;
-        sendBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Sending Command...';
-        document.getElementById('loadingSpinner').classList.add('active');
+        console.log(`🚀 Sending command ${station.command} for ${station.name}`);
+        const toAlteraRef = ref(db, 'toAltera');
+        await set(toAlteraRef, station.command);
         
-        // Check current bot state
-        const botStatusRef = ref(db, 'bot/status');
-        const statusSnapshot = await get(botStatusRef);
+        showNotification(`✅ Sent command ${station.command} to ${station.name}`, 'success');
         
-        if (statusSnapshot.exists()) {
-            const currentStatus = statusSnapshot.val();
-            
-            // Don't allow new commands if bot is already moving
-            if (currentStatus.state === 'Moving') {
-                showNotification('⚠️ Bot is already in transit. Please wait for current movement to complete.', 'warning');
-                sendBtn.disabled = false;
-                sendBtn.innerHTML = originalText;
-                document.getElementById('loadingSpinner').classList.remove('active');
-                return;
-            }
-        }
-        
-        // Create command in database
-        const commandRef = ref(db, `bot/commands/${Date.now()}`);
-        await set(commandRef, {
-            from: currentStation,
-            to: selectedStation.id,
-            requestedBy: currentUser.email,
-            timestamp: Date.now(),
-            status: 'pending',
-            distance: calculateDistance(currentStation, selectedStation.id),
-            obstacles: 0 // Will be updated by robot during movement
-        });
-        
-        // Update bot status to set target station
-        await set(botStatusRef, {
-            currentStation: currentStation,
-            targetStation: selectedStation.id,
-            state: 'Command Sent',
-            lastUpdated: serverTimestamp()
-        });
-        
-        showNotification(`✅ Command sent! Waiting for bot to start moving to ${selectedStation.name}...`, 'success');
-        
-        // Reset button but keep it disabled until bot completes movement
-        sendBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Waiting for Bot Response...';
-        document.getElementById('loadingSpinner').classList.remove('active');
-        
-        // Clear selection
-        selectedStation = null;
-        document.querySelectorAll('.station-card').forEach(card => {
-            card.classList.remove('selected');
-        });
-        document.getElementById('selectionHint').textContent = 'Command sent - waiting for bot...';
+        // Update status
+        document.getElementById('selectionHint').textContent = `Sent: ${station.name} (${station.command})`;
         
     } catch (error) {
-        console.error('Error sending command:', error);
-        
-        let errorMessage = '❌ Failed to send command. ';
-        if (error.code === 'PERMISSION_DENIED') {
-            errorMessage += 'Database permission denied. Check Firebase rules.';
-        } else if (error.code === 'NETWORK_ERROR') {
-            errorMessage += 'Network error. Check your internet connection.';
-        } else {
-            errorMessage += error.message;
-        }
-        
-        showNotification(errorMessage, 'danger');
-        
-        sendBtn.disabled = false;
-        sendBtn.innerHTML = originalText;
-        document.getElementById('loadingSpinner').classList.remove('active');
+        console.error('❌ Error sending station command:', error);
+        showNotification(`❌ Failed to send command: ${error.message}`, 'danger');
     }
 }
+
+// Note: Station selection now sends command immediately - no separate send function needed
 
 // Setup realtime listeners for bot status updates
 function setupRealtimeListeners() {
@@ -328,12 +242,9 @@ function setupRealtimeListeners() {
                     showNotification(`✅ Bot arrived at ${stationInfo ? stationInfo.name : currentStation}!`, 'success');
                 }
                 
-                // Reset selection and button
+                // Reset selection
                 selectedStation = null;
-                const sendBtn = document.getElementById('sendCommandBtn');
-                sendBtn.disabled = true;
-                sendBtn.innerHTML = '<i class="bi bi-send me-2"></i>Send Bot to Selected Station';
-                document.getElementById('selectionHint').textContent = 'Select a destination station above';
+                document.getElementById('selectionHint').textContent = 'Select a destination station';
             }
             
             // Handle state changes
@@ -349,12 +260,6 @@ function setupRealtimeListeners() {
                     showNotification(`❌ Error: ${errorMsg}`, 'danger');
                 } else if (status.state === 'Ready' && previousState === 'Moving') {
                     // Bot finished moving - already handled in station change
-                } else if (status.state === 'Ready') {
-                    // Enable controls when bot is ready
-                    const sendBtn = document.getElementById('sendCommandBtn');
-                    if (!selectedStation) {
-                        sendBtn.disabled = true;
-                    }
                 }
             }
             
@@ -432,67 +337,7 @@ function setupRealtimeListeners() {
     });
 }
 
-// Monitor ESP32 connection status
-function startConnectionMonitoring() {
-    const connectionRef = ref(db, 'bot/esp32/connected');
-    const lastHeartbeatRef = ref(db, 'bot/esp32/lastHeartbeat');
-    
-    // Listen for connection status changes
-    onValue(connectionRef, (snapshot) => {
-        if (snapshot.exists()) {
-            isConnected = snapshot.val();
-            updateConnectionStatus(isConnected);
-        } else {
-            isConnected = false;
-            updateConnectionStatus(false);
-        }
-    });
-    
-    // Check heartbeat every 5 seconds
-    connectionCheckInterval = setInterval(async () => {
-        try {
-            const snapshot = await get(lastHeartbeatRef);
-            if (snapshot.exists()) {
-                const lastHeartbeat = snapshot.val();
-                const now = Date.now();
-                const timeDiff = now - lastHeartbeat;
-                
-                // Consider disconnected if no heartbeat for more than 10 seconds
-                if (timeDiff > 10000) {
-                    isConnected = false;
-                    updateConnectionStatus(false);
-                }
-            } else {
-                isConnected = false;
-                updateConnectionStatus(false);
-            }
-        } catch (error) {
-            console.error('Error checking heartbeat:', error);
-        }
-    }, 5000);
-}
-
-// Stop connection monitoring
-function stopConnectionMonitoring() {
-    if (connectionCheckInterval) {
-        clearInterval(connectionCheckInterval);
-        connectionCheckInterval = null;
-    }
-}
-
-// Update connection status display
-function updateConnectionStatus(connected) {
-    const statusBadge = document.getElementById('connectionStatus');
-    if (!statusBadge) return;
-    
-    if (connected) {
-        statusBadge.className = 'badge bg-success';
-        statusBadge.innerHTML = '<i class="bi bi-wifi me-1"></i>Connected';
-    } else {
-        statusBadge.className = 'badge bg-danger';
-        statusBadge.innerHTML = '<i class="bi bi-wifi-off me-1"></i>Disconnected';
-    }
-}
+// Connection monitoring removed - commands send directly to Firebase
 
 // Update last update time display
 function updateLastUpdateTime(timestamp) {
@@ -654,17 +499,8 @@ function showNotification(message, type = 'info') {
     }, 5000);
 }
 
-// Event listener for send command button
+// Event listeners
 document.addEventListener('DOMContentLoaded', () => {
-    const sendBtn = document.getElementById('sendCommandBtn');
-    if (sendBtn) {
-        sendBtn.addEventListener('click', sendBotCommand);
-    }
-    
-    const manualOverrideBtn = document.getElementById('manualOverrideBtn');
-    if (manualOverrideBtn) {
-        manualOverrideBtn.addEventListener('click', manualOverride);
-    }
     
     // Setup manual control buttons
     setupManualControl();
@@ -695,14 +531,6 @@ function setupManualControl() {
 // Send manual control command
 async function sendManualCommand(direction) {
     const statusDiv = document.getElementById('manualControlStatus');
-    
-    // Check if bot is connected
-    if (!isConnected) {
-        statusDiv.className = 'alert alert-danger';
-        statusDiv.innerHTML = '<i class="bi bi-exclamation-triangle me-2"></i>Bot is not connected! Cannot send manual commands.';
-        showNotification('❌ Bot is not connected! Please check ESP32 connection.', 'danger');
-        return;
-    }
     
     try {
         // Send manual control command to Firebase
@@ -824,63 +652,49 @@ window.sendManualCommand = async function(commandValue) {
     }
 }
 
-// Update light slider display
-window.updateLightValue = function(value) {
-    const lightValue = document.getElementById('lightValue');
-    value = parseInt(value);
-    
-    if (value == 128) {
-        lightValue.textContent = `OFF (${value})`;
-        lightValue.className = 'badge bg-secondary';
-    } else if (value >= 132 && value <= 135) {
-        lightValue.textContent = `ON (${value})`;
-        lightValue.className = 'badge bg-warning';
-    } else {
-        // Skip 129-131
-        lightValue.textContent = `Invalid (${value})`;
-        lightValue.className = 'badge bg-danger';
-    }
-}
-
-// Snap slider to valid values (skip 129-131)
-window.snapLightValue = function(slider) {
-    const value = parseInt(slider.value);
-    
-    // If in invalid range (129-131), snap to nearest valid value
-    if (value >= 129 && value <= 131) {
-        if (value == 129) {
-            slider.value = 128; // Snap to OFF
-        } else {
-            slider.value = 132; // Snap to lowest ON
-        }
-        updateLightValue(slider.value);
-    }
-}
-
-// Send light command to toAltera
-window.sendLightCommand = async function() {
+// Toggle light on/off button
+window.toggleLight = async function() {
     if (!currentUser) {
         showNotification('❌ Please login first', 'danger');
         return;
     }
 
-    const slider = document.getElementById('lightSlider');
-    const value = parseInt(slider.value);
-
-    // Validate value (only 128 or 132-135)
-    if (value !== 128 && (value < 132 || value > 135)) {
-        showNotification('❌ Invalid light value. Use 128 (OFF) or 132-135 (ON)', 'danger');
-        return;
+    const btn = document.getElementById('lightToggleBtn');
+    const lightValue = document.getElementById('lightValue');
+    const currentState = btn.getAttribute('data-state');
+    
+    let value;
+    let newState;
+    
+    if (currentState === 'off') {
+        // Turn ON - send 135
+        value = 135;
+        newState = 'on';
+        btn.style.backgroundColor = '#ffc107'; // Yellow/warning color
+        btn.innerHTML = '<i class="bi bi-lightbulb-fill"></i> Light ON';
+        lightValue.textContent = 'ON (135)';
+        lightValue.className = 'badge bg-warning';
+    } else {
+        // Turn OFF - send 128
+        value = 128;
+        newState = 'off';
+        btn.style.backgroundColor = '#6c757d'; // Gray/secondary color
+        btn.innerHTML = '<i class="bi bi-lightbulb"></i> Light OFF';
+        lightValue.textContent = 'OFF (128)';
+        lightValue.className = 'badge bg-secondary';
     }
-
+    
     try {
-        console.log('💡 Sending light command to toAltera:', value);
+        console.log('💡 Toggling light, sending to toAltera:', value);
         const toAlteraRef = ref(db, 'toAltera');
         await set(toAlteraRef, value);
         
+        // Update button state
+        btn.setAttribute('data-state', newState);
+        
         const statusDiv = document.getElementById('manualControlStatus');
         statusDiv.className = 'alert alert-success';
-        statusDiv.innerHTML = `<i class="bi bi-lightbulb me-2"></i>Light ${value === 128 ? 'OFF' : 'ON'} (${value}) sent`;
+        statusDiv.innerHTML = `<i class="bi bi-lightbulb me-2"></i>Light ${newState === 'on' ? 'ON' : 'OFF'} (${value}) sent`;
         console.log(`✅ Light command sent to toAltera`);
         
         // Reset status after 2 seconds
@@ -892,6 +706,92 @@ window.sendLightCommand = async function() {
     } catch (error) {
         console.error('❌ Error sending light command:', error);
         showNotification(`❌ Failed to send light command: ${error.message}`, 'danger');
+    }
+}
+
+// Toggle manual/auto mode button
+window.toggleMode = async function() {
+    if (!currentUser) {
+        showNotification('❌ Please login first', 'danger');
+        return;
+    }
+
+    const btn = document.getElementById('modeToggleBtn');
+    const modeValue = document.getElementById('modeValue');
+    const currentState = btn.getAttribute('data-state');
+    
+    let value;
+    let newState;
+    
+    if (currentState === 'manual') {
+        // Switch to AUTO - send 200
+        value = 200;
+        newState = 'auto';
+        btn.style.backgroundColor = '#0d6efd'; // Blue color
+        btn.innerHTML = '<i class="bi bi-gear"></i> Auto Mode';
+        modeValue.textContent = 'AUTO (200)';
+        modeValue.className = 'badge bg-primary';
+    } else {
+        // Switch to MANUAL - send 201
+        value = 201;
+        newState = 'manual';
+        btn.style.backgroundColor = '#fd7e14'; // Orange color
+        btn.innerHTML = '<i class="bi bi-hand-index"></i> Manual Mode';
+        modeValue.textContent = 'MANUAL (201)';
+        modeValue.className = 'badge bg-warning';
+    }
+    
+    try {
+        console.log('🔧 Toggling mode, sending to toAltera:', value);
+        const toAlteraRef = ref(db, 'toAltera');
+        await set(toAlteraRef, value);
+        
+        // Update button state
+        btn.setAttribute('data-state', newState);
+        
+        const statusDiv = document.getElementById('manualControlStatus');
+        statusDiv.className = 'alert alert-success';
+        statusDiv.innerHTML = `<i class="bi bi-gear me-2"></i>Mode switched to ${newState.toUpperCase()} (${value})`;
+        console.log(`✅ Mode command sent to toAltera`);
+        
+        // Reset status after 2 seconds
+        setTimeout(() => {
+            statusDiv.className = 'alert alert-secondary';
+            statusDiv.innerHTML = '<i class="bi bi-info-circle me-2"></i>Ready to send manual commands';
+        }, 2000);
+        
+    } catch (error) {
+        console.error('❌ Error sending mode command:', error);
+        showNotification(`❌ Failed to send mode command: ${error.message}`, 'danger');
+    }
+}
+
+// Send clear command
+window.sendClearCommand = async function() {
+    if (!currentUser) {
+        showNotification('❌ Please login first', 'danger');
+        return;
+    }
+    
+    try {
+        console.log('🗑️ Sending clear command to toAltera: 192');
+        const toAlteraRef = ref(db, 'toAltera');
+        await set(toAlteraRef, 192);
+        
+        const statusDiv = document.getElementById('manualControlStatus');
+        statusDiv.className = 'alert alert-success';
+        statusDiv.innerHTML = '<i class="bi bi-x-circle me-2"></i>Clear command (192) sent';
+        console.log('✅ Clear command sent to toAltera');
+        
+        // Reset status after 2 seconds
+        setTimeout(() => {
+            statusDiv.className = 'alert alert-secondary';
+            statusDiv.innerHTML = '<i class="bi bi-info-circle me-2"></i>Ready to send manual commands';
+        }, 2000);
+        
+    } catch (error) {
+        console.error('❌ Error sending clear command:', error);
+        showNotification(`❌ Failed to send clear command: ${error.message}`, 'danger');
     }
 }
 
